@@ -25,9 +25,9 @@ export function Header({
 }: HeaderProps) {
   const {shop, menu} = header;
   return (
-    <header className="header">
+    <header className="header flex items-center justify-between px-6 py-4">
       <NavLink prefetch="intent" to="/" style={activeLinkStyle} end>
-        <strong>{shop.name}</strong>
+        <span className="logo">MY BRAND</span>
       </NavLink>
       <HeaderMenu
         menu={menu}
