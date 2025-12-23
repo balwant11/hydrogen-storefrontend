@@ -5,7 +5,7 @@ import {Image} from '@shopify/hydrogen';
 import type {
   FeaturedCollectionFragment,
   RecommendedProductsQuery,
-  CollectionsWithProductsQuery
+  CollectionsWithProductsQuery,
 } from 'storefrontapi.generated';
 import {ProductItem} from '~/components/ProductItem';
 import RetroTVStore from '~/components/RetroTVStore';
@@ -35,9 +35,9 @@ async function loadCriticalData({context}: Route.LoaderArgs) {
   // ]);
 
   const {collections} =
-  await context.storefront.query<CollectionsWithProductsQuery>(
-    COLLECTIONS_WITH_PRODUCTS_QUERY,
-  );
+    await context.storefront.query<CollectionsWithProductsQuery>(
+      COLLECTIONS_WITH_PRODUCTS_QUERY,
+    );
 
   return {
     collections: collections.nodes,
@@ -64,12 +64,12 @@ function loadDeferredData({context}: Route.LoaderArgs) {
 }
 
 export default function Homepage() {
-  const { collections } = useLoaderData<typeof loader>();
+  const {collections} = useLoaderData<typeof loader>();
   return (
     <div className="home">
       {/* <FeaturedCollection collection={data.featuredCollection} />
       <RecommendedProducts products={data.recommendedProducts} /> */}
-      <RetroTVStore collections={collections}/>
+      <RetroTVStore collections={collections} />
     </div>
   );
 }
@@ -197,6 +197,8 @@ const COLLECTIONS_WITH_PRODUCTS_QUERY = `#graphql
               nodes {
                 id
                 title
+                availableForSale
+                quantityAvailable
                 price {
                   amount
                 }

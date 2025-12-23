@@ -406,7 +406,10 @@ export type CollectionsWithProductsQuery = {
               >;
               variants: {
                 nodes: Array<
-                  Pick<StorefrontAPI.ProductVariant, 'id' | 'title'> & {
+                  Pick<
+                    StorefrontAPI.ProductVariant,
+                    'id' | 'title' | 'availableForSale' | 'quantityAvailable'
+                  > & {
                     price: Pick<StorefrontAPI.MoneyV2, 'amount'>;
                     selectedOptions: Array<
                       Pick<StorefrontAPI.SelectedOption, 'name' | 'value'>
@@ -1269,7 +1272,7 @@ interface GeneratedQueryTypes {
     return: RecommendedProductsQuery;
     variables: RecommendedProductsQueryVariables;
   };
-  '#graphql\n  query CollectionsWithProducts(\n    $country: CountryCode\n    $language: LanguageCode\n  ) @inContext(country: $country, language: $language) {\n    collections(first: 20) {\n      nodes {\n        id\n        title\n        handle\n        products(first: 50) {\n          nodes {\n            id\n            title\n            description\n            featuredImage {\n              url\n              altText\n            }\n            variants(first: 20) {\n              nodes {\n                id\n                title\n                price {\n                  amount\n                }\n                selectedOptions {\n                  name\n                  value\n                }\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n': {
+  '#graphql\n  query CollectionsWithProducts(\n    $country: CountryCode\n    $language: LanguageCode\n  ) @inContext(country: $country, language: $language) {\n    collections(first: 20) {\n      nodes {\n        id\n        title\n        handle\n        products(first: 50) {\n          nodes {\n            id\n            title\n            description\n            featuredImage {\n              url\n              altText\n            }\n            variants(first: 20) {\n              nodes {\n                id\n                title\n                availableForSale\n                quantityAvailable\n                price {\n                  amount\n                }\n                selectedOptions {\n                  name\n                  value\n                }\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n': {
     return: CollectionsWithProductsQuery;
     variables: CollectionsWithProductsQueryVariables;
   };

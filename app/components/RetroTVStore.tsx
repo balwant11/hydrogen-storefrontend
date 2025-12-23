@@ -14,20 +14,25 @@ import {
 import {CartForm} from '@shopify/hydrogen';
 import {Await, useRouteLoaderData} from 'react-router';
 import type {RootLoader} from '~/root';
-import type { CollectionsWithProductsQuery } from 'storefrontapi.generated';
+import type {CollectionsWithProductsQuery} from 'storefrontapi.generated';
 
 // 👉 ADD THIS BELOW ALL IMPORTS
 
-type VariantNode = {
-  id: string;
-  price: {
-    amount: string;
-  };
-  selectedOptions: {
-    name: string;
-    value: string;
-  }[];
-};
+// type VariantNode = {
+//   id: string;
+//   availableForSale: boolean;
+//   quantityAvailable?: number;
+//   price: {
+//     amount: string;
+//   };
+//   selectedOptions: {
+//     name: string;
+//     value: string;
+//   }[];
+// };
+
+type ShopifyVariant =
+  CollectionsWithProductsQuery['collections']['nodes'][number]['products']['nodes'][number]['variants']['nodes'][number];
 
 type Product = {
   id: string;
@@ -38,7 +43,7 @@ type Product = {
   type: string;
   variants: string[];
   sizes: string[];
-  variantNodes: VariantNode[];
+  variantNodes: ShopifyVariant[];
 };
 
 type Category = {
@@ -110,8 +115,10 @@ export default function RetroTVStore({collections}: RetroTVStoreProps) {
   const [showPrompt, setShowPrompt] = useState(true); // State for the first-time user prompt
   const [categoryIdx, setCategoryIdx] = useState(0);
   const [productIdx, setProductIdx] = useState(0);
-  const [variantIdx, setVariantIdx] = useState(0);
-  const [sizeIdx, setSizeIdx] = useState(0); // New size state
+  // const [variantIdx, setVariantIdx] = useState(0);
+  // const [sizeIdx, setSizeIdx] = useState(0); // New size state
+  const [selectedColor, setSelectedColor] = useState<string | undefined>();
+  const [selectedSize, setSelectedSize] = useState<string | undefined>();
   const [staticEffect, setStaticEffect] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   // const [cart, setCart] = useState<Product[]>([]);
@@ -155,13 +162,42 @@ export default function RetroTVStore({collections}: RetroTVStoreProps) {
   const currentCategory = categories[categoryIdx];
   const productsCount = currentCategory.products.length;
   const currentProduct = currentCategory.products[productIdx];
-  const selectedVariantId = currentProduct.variantNodes?.[variantIdx]?.id;
+  const selectedVariant = currentProduct.variantNodes.find((variant) => {
+    const colorMatch = variant.selectedOptions.some(
+      (o) => o.name === 'Color' && o.value === selectedColor,
+    );
+
+    const sizeOptionExists = variant.selectedOptions.some(
+      (o) => o.name === 'Size',
+    );
+
+    const sizeMatch = sizeOptionExists
+      ? variant.selectedOptions.some(
+          (o) => o.name === 'Size' && o.value === selectedSize,
+        )
+      : true; 
+
+    return colorMatch && sizeMatch;
+  });
+  const selectedVariantId = selectedVariant?.id;
+  const isOutOfStock =
+    !selectedVariant?.availableForSale ||
+    (selectedVariant?.quantityAvailable ?? 1) <= 0;
+  const canOrder = Boolean(selectedVariantId) && !isOutOfStock;
 
   const triggerStatic = () => {
     if (!isOn) return;
     setStaticEffect(true);
     setTimeout(() => setStaticEffect(false), 600);
   };
+  // console.log('🧪 VARIANT DEBUG', {
+  //   product: currentProduct.name,
+  //   color: selectedColor,
+  //   size: selectedSize,
+  //   variantId: selectedVariant?.id,
+  //   availableForSale: selectedVariant?.availableForSale,
+  //   quantityAvailable: selectedVariant?.quantityAvailable,
+  // });
 
   const handlePower = () => {
     if (showPrompt) setShowPrompt(false); // Dismiss prompt on power interaction
@@ -188,8 +224,17 @@ export default function RetroTVStore({collections}: RetroTVStoreProps) {
 
     setCategoryIdx(newIdx);
     setProductIdx(0);
-    setVariantIdx(0);
-    setSizeIdx(0);
+    const firstVariant = currentProduct.variantNodes.find(
+      (v) => v.availableForSale,
+    );
+
+    setSelectedColor(
+      firstVariant?.selectedOptions.find((o) => o.name === 'Color')?.value,
+    );
+
+    setSelectedSize(
+      firstVariant?.selectedOptions.find((o) => o.name === 'Size')?.value,
+    );
   };
 
   const changeChannel = (direction: number) => {
@@ -199,9 +244,71 @@ export default function RetroTVStore({collections}: RetroTVStoreProps) {
     if (newIdx >= productsCount) newIdx = 0;
 
     setProductIdx(newIdx);
-    setVariantIdx(0);
-    setSizeIdx(0);
+    const firstVariant = currentProduct.variantNodes.find(
+      (v) => v.availableForSale,
+    );
+
+    setSelectedColor(
+      firstVariant?.selectedOptions.find((o) => o.name === 'Color')?.value,
+    );
+
+    setSelectedSize(
+      firstVariant?.selectedOptions.find((o) => o.name === 'Size')?.value,
+    );
   };
+
+  const colorVariantMap = React.useMemo(() => {
+    const map = new Map<string, ShopifyVariant>();
+
+    currentProduct.variantNodes.forEach((variant) => {
+      const color = variant.selectedOptions.find(
+        (o) => o.name === 'Color',
+      )?.value;
+
+      if (!color) return;
+
+      // Pick first AVAILABLE variant for that color
+      if (!map.has(color) && variant.availableForSale) {
+        map.set(color, variant);
+      }
+
+      // If none available yet, still set one (for disabled state)
+      if (!map.has(color)) {
+        map.set(color, variant);
+      }
+    });
+
+    return Array.from(map.entries()).map(([color, variant]) => ({
+      color,
+      variant,
+    }));
+  }, [currentProduct]);
+
+  const availableSizesForColor = React.useMemo(() => {
+    const sizeSet = new Set<string>();
+
+    currentProduct.variantNodes.forEach((variant) => {
+      const color = variant.selectedOptions.find(
+        (o) => o.name === 'Color',
+      )?.value;
+
+      const size = variant.selectedOptions.find(
+        (o) => o.name === 'Size',
+      )?.value;
+
+      if (color === selectedColor && size && variant.availableForSale) {
+        sizeSet.add(size);
+      }
+    });
+
+    return Array.from(sizeSet);
+  }, [currentProduct, selectedColor]);
+
+  // console.log('🎯 FINAL SELECTION', {
+  //   color: selectedColor,
+  //   size: selectedSize,
+  //   variantId: selectedVariantId,
+  // });
 
   // const addToCart = (product: Product) => {
   //   const productWithVariant = {
@@ -302,7 +409,6 @@ export default function RetroTVStore({collections}: RetroTVStoreProps) {
                         >
                           <Await resolve={cart}>
                             {(resolvedCart) => {
-                              console.log('response', resolvedCart.lines);
                               if (
                                 !resolvedCart ||
                                 resolvedCart.totalQuantity === 0
@@ -413,8 +519,23 @@ export default function RetroTVStore({collections}: RetroTVStoreProps) {
                               onClick={() => {
                                 setCategoryIdx(cIdx);
                                 setProductIdx(pIdx);
-                                setVariantIdx(0);
-                                setSizeIdx(0);
+                                const firstVariant =
+                                  currentProduct.variantNodes.find(
+                                    (v) => v.availableForSale,
+                                  );
+
+                                setSelectedColor(
+                                  firstVariant?.selectedOptions.find(
+                                    (o) => o.name === 'Color',
+                                  )?.value,
+                                );
+
+                                setSelectedSize(
+                                  firstVariant?.selectedOptions.find(
+                                    (o) => o.name === 'Size',
+                                  )?.value,
+                                );
+
                                 setShowGuide(false);
                                 triggerStatic();
                               }}
@@ -465,84 +586,154 @@ export default function RetroTVStore({collections}: RetroTVStoreProps) {
                       <div className="flex flex-wrap items-center gap-3 mb-2">
                         {/* Variants (Clickable Buttons) */}
                         <div className="flex gap-2 text-[10px] md:text-xs font-bold text-green-300">
-                          {currentProduct.variants.map((v, i) => (
-                            <button
-                              key={i}
-                              onClick={() => setVariantIdx(i)}
-                              className={`
-                                  px-1.5 py-0.5 border rounded uppercase shadow-sm transition-all duration-200 active:scale-95
-                                  ${
-                                    i === variantIdx
-                                      ? 'bg-yellow-400 text-black border-yellow-500'
-                                      : 'bg-green-900/60 border-green-700/50 hover:bg-green-800 hover:text-white'
-                                  }
-                              `}
-                            >
-                              {v}
-                            </button>
-                          ))}
+                          {/* {currentProduct.variantNodes.map((variant, i) => {
+                            const color = variant.selectedOptions.find(
+                              (o) => o.name === 'Color',
+                            )?.value;
+
+                            const isOutOfStock = !variant.availableForSale;
+
+                            return (
+                              <button
+                                key={variant.id}
+                                onClick={() =>
+                                  !isOutOfStock && setVariantIdx(i)
+                                }
+                                disabled={isOutOfStock}
+                                className={`
+        px-1.5 py-0.5 border rounded uppercase shadow-sm transition-all duration-200
+        ${
+          isOutOfStock
+            ? 'bg-gray-700 text-gray-400 cursor-not-allowed line-through'
+            : i === variantIdx
+              ? 'bg-yellow-400 text-black border-yellow-500'
+              : 'bg-green-900/60 border-green-700/50 hover:bg-green-800 hover:text-white'
+        }
+      `}
+                              >
+                                {color}
+                              </button>
+                            );
+                          })} */}
+                          <div className="flex gap-2 text-[10px] md:text-xs font-bold text-green-300">
+                            {colorVariantMap.map(({color, variant}, i) => {
+                              const isSelected = selectedColor === color;
+
+                              const isOutOfStock = !variant.availableForSale;
+
+                              return (
+                                <button
+                                  key={color}
+                                  onClick={() => {
+                                    if (isOutOfStock) return;
+
+                                    setSelectedColor(color);
+
+                                    // auto-pick first AVAILABLE size for this color
+                                    const firstAvailableSize =
+                                      currentProduct.variantNodes
+                                        .filter((v) =>
+                                          v.selectedOptions.some(
+                                            (o) =>
+                                              o.name === 'Color' &&
+                                              o.value === color,
+                                          ),
+                                        )
+                                        .find((v) => v.availableForSale)
+                                        ?.selectedOptions.find(
+                                          (o) => o.name === 'Size',
+                                        )?.value;
+
+                                    if (firstAvailableSize) {
+                                      setSelectedSize(firstAvailableSize);
+                                    }
+                                  }}
+                                  disabled={isOutOfStock}
+                                  className={`
+          px-1.5 py-0.5 border rounded uppercase shadow-sm transition-all duration-200
+          ${
+            isOutOfStock
+              ? 'bg-gray-700 text-gray-400 cursor-not-allowed line-through'
+              : isSelected
+                ? 'bg-yellow-400 text-black border-yellow-500'
+                : 'bg-green-900/60 border-green-700/50 hover:bg-green-800 hover:text-white'
+          }
+        `}
+                                >
+                                  {color}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
 
                         {/* Size Dropdown */}
-                        <div className="relative">
-                          <select
-                            value={sizeIdx}
-                            onChange={(e) =>
-                              setSizeIdx(parseInt(e.target.value))
-                            }
-                            className="appearance-none bg-green-900/60 border border-green-700/50 text-green-300 text-[10px] md:text-xs font-bold rounded py-0.5 pl-2 pr-6 focus:outline-none focus:border-yellow-500 uppercase"
-                          >
-                            {currentProduct.sizes.map((s, i) => (
-                              <option key={i} value={i}>
-                                {s}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 text-green-300 pointer-events-none" />
-                        </div>
+                        {availableSizesForColor.length > 0 && (
+                          <div className="relative">
+                            <select
+                              value={selectedSize}
+                              onChange={(e) => setSelectedSize(e.target.value)}
+                              className="appearance-none bg-green-900/60 border border-green-700/50
+                            text-green-300 text-[10px] md:text-xs font-bold rounded
+                            py-0.5 pl-2 pr-6 focus:outline-none focus:border-yellow-500 uppercase"
+                            >
+                              {availableSizesForColor.map((size) => (
+                                <option key={size} value={size}>
+                                  {size}
+                                </option>
+                              ))}
+                            </select>
+
+                            <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 text-green-300 pointer-events-none" />
+                          </div>
+                        )}
                       </div>
 
                       <p className="text-gray-300 max-w-lg text-xs md:text-sm leading-snug drop-shadow-sm mb-3 line-clamp-2 md:line-clamp-none opacity-90">
                         {currentProduct.description}
                       </p>
-                      {selectedVariantId && (
-                        <CartForm
-                          route="/cart"
-                          action={CartForm.ACTIONS.LinesAdd}
-                          inputs={{
-                            lines: [
-                              {
-                                merchandiseId: selectedVariantId,
-                                quantity: 1,
-                              },
-                            ],
-                          }}
-                        >
-                          {(fetcher) => {
-                            const isAdding = fetcher.state !== 'idle';
+                      <CartForm
+                        route="/cart"
+                        action={CartForm.ACTIONS.LinesAdd}
+                        inputs={{
+                          lines: selectedVariantId
+                            ? [{merchandiseId: selectedVariantId, quantity: 1}]
+                            : [],
+                        }}
+                      >
+                        {(fetcher) => {
+                          const isAdding = fetcher.state !== 'idle';
 
-                            return (
-                              <button
-                                type="submit"
-                                disabled={isAdding}
-                                className={`
-            px-4 py-1.5 rounded-sm font-bold uppercase tracking-widest
-            border-b-4 active:border-b-0 active:translate-y-1
-            transition-all shadow-[0_4px_10px_rgba(0,0,0,0.5)]
-            text-xs md:text-sm
-            ${
-              isAdding
-                ? 'bg-green-600 border-green-800 text-white cursor-default'
+                          let buttonText = 'SELECT COLOR';
+                          if (selectedColor && !selectedSize)
+                            buttonText = 'SELECT SIZE';
+                          if (selectedVariantId && isOutOfStock)
+                            buttonText = 'OUT OF STOCK';
+                          if (canOrder)
+                            buttonText = isAdding ? 'ADDING...' : 'ORDER NOW';
+
+                          return (
+                            <button
+                              type="submit"
+                              disabled={!canOrder || isAdding}
+                              className={`px-4 py-1.5 rounded-sm font-bold uppercase tracking-widest
+          border-b-4 active:border-b-0 active:translate-y-1
+          transition-all shadow-[0_4px_10px_rgba(0,0,0,0.5)]
+          text-xs md:text-sm
+          ${
+            !canOrder
+              ? 'bg-gray-600 border-gray-800 cursor-not-allowed'
+              : isAdding
+                ? 'bg-green-600 border-green-800 text-white'
                 : 'bg-red-600 hover:bg-red-500 border-red-800 text-white'
-            }
-          `}
-                              >
-                                {isAdding ? 'ADDING...' : 'ORDER NOW'}
-                              </button>
-                            );
-                          }}
-                        </CartForm>
-                      )}
+          }
+        `}
+                            >
+                              {buttonText}
+                            </button>
+                          );
+                        }}
+                      </CartForm>
                     </div>
                   </div>
                 )}
