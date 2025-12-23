@@ -5,8 +5,10 @@ import {Image} from '@shopify/hydrogen';
 import type {
   FeaturedCollectionFragment,
   RecommendedProductsQuery,
+  CollectionsWithProductsQuery
 } from 'storefrontapi.generated';
 import {ProductItem} from '~/components/ProductItem';
+import RetroTVStore from '~/components/RetroTVStore';
 
 export const meta: Route.MetaFunction = () => {
   return [{title: 'Hydrogen | Home'}];
@@ -27,13 +29,18 @@ export async function loader(args: Route.LoaderArgs) {
  * needed to render the page. If it's unavailable, the whole page should 400 or 500 error.
  */
 async function loadCriticalData({context}: Route.LoaderArgs) {
-  const [{collections}] = await Promise.all([
-    context.storefront.query(FEATURED_COLLECTION_QUERY),
-    // Add other queries here, so that they are loaded in parallel
-  ]);
+  // const [{collections}] = await Promise.all([
+  //   context.storefront.query(FEATURED_COLLECTION_QUERY),
+  //   // Add other queries here, so that they are loaded in parallel
+  // ]);
+
+  const {collections} =
+  await context.storefront.query<CollectionsWithProductsQuery>(
+    COLLECTIONS_WITH_PRODUCTS_QUERY,
+  );
 
   return {
-    featuredCollection: collections.nodes[0],
+    collections: collections.nodes,
   };
 }
 
@@ -57,11 +64,12 @@ function loadDeferredData({context}: Route.LoaderArgs) {
 }
 
 export default function Homepage() {
-  const data = useLoaderData<typeof loader>();
+  const { collections } = useLoaderData<typeof loader>();
   return (
     <div className="home">
-      <FeaturedCollection collection={data.featuredCollection} />
-      <RecommendedProducts products={data.recommendedProducts} />
+      {/* <FeaturedCollection collection={data.featuredCollection} />
+      <RecommendedProducts products={data.recommendedProducts} /> */}
+      <RetroTVStore collections={collections}/>
     </div>
   );
 }
@@ -161,6 +169,45 @@ const RECOMMENDED_PRODUCTS_QUERY = `#graphql
     products(first: 4, sortKey: UPDATED_AT, reverse: true) {
       nodes {
         ...RecommendedProduct
+      }
+    }
+  }
+` as const;
+
+const COLLECTIONS_WITH_PRODUCTS_QUERY = `#graphql
+  query CollectionsWithProducts(
+    $country: CountryCode
+    $language: LanguageCode
+  ) @inContext(country: $country, language: $language) {
+    collections(first: 20) {
+      nodes {
+        id
+        title
+        handle
+        products(first: 50) {
+          nodes {
+            id
+            title
+            description
+            featuredImage {
+              url
+              altText
+            }
+            variants(first: 20) {
+              nodes {
+                id
+                title
+                price {
+                  amount
+                }
+                selectedOptions {
+                  name
+                  value
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

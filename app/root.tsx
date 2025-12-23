@@ -17,6 +17,7 @@ import resetStyles from '~/styles/reset.css?url';
 import appStyles from '~/styles/app.css?url';
 import tailwindCss from './styles/tailwind.css?url';
 import {PageLayout} from './components/PageLayout';
+import {CART_FRAGMENT} from '~/lib/cart-fragment';
 
 export type RootLoader = typeof loader;
 
@@ -68,7 +69,7 @@ export function links() {
 
 export async function loader(args: Route.LoaderArgs) {
   // Start fetching non-critical data without blocking time to first byte
-  const deferredData = loadDeferredData(args);
+  const deferredData = await loadDeferredData(args);
 
   // Await the critical data required to render initial state of the page
   const criticalData = await loadCriticalData(args);
@@ -101,17 +102,17 @@ export async function loader(args: Route.LoaderArgs) {
 async function loadCriticalData({context}: Route.LoaderArgs) {
   const {storefront} = context;
 
-  const [header] = await Promise.all([
-    storefront.query(HEADER_QUERY, {
-      cache: storefront.CacheLong(),
-      variables: {
-        headerMenuHandle: 'main-menu', // Adjust to your header menu handle
-      },
-    }),
-    // Add other queries here, so that they are loaded in parallel
-  ]);
+  // const [header] = await Promise.all([
+  //   storefront.query(HEADER_QUERY, {
+  //     cache: storefront.CacheLong(),
+  //     variables: {
+  //       headerMenuHandle: 'main-menu', // Adjust to your header menu handle
+  //     },
+  //   }),
+  //   // Add other queries here, so that they are loaded in parallel
+  // ]);
 
-  return {header};
+  return {};
 }
 
 /**
@@ -119,26 +120,26 @@ async function loadCriticalData({context}: Route.LoaderArgs) {
  * fetched after the initial page load. If it's unavailable, the page should still 200.
  * Make sure to not throw any errors here, as it will cause the page to 500.
  */
-function loadDeferredData({context}: Route.LoaderArgs) {
+async function loadDeferredData({context}: Route.LoaderArgs) {
   const {storefront, customerAccount, cart} = context;
-
+  const cartData = await cart.get();
   // defer the footer query (below the fold)
-  const footer = storefront
-    .query(FOOTER_QUERY, {
-      cache: storefront.CacheLong(),
-      variables: {
-        footerMenuHandle: 'footer', // Adjust to your footer menu handle
-      },
-    })
-    .catch((error: Error) => {
-      // Log query errors, but don't throw them so the page can still render
-      console.error(error);
-      return null;
-    });
+  // const footer = storefront
+  //   .query(FOOTER_QUERY, {
+  //     cache: storefront.CacheLong(),
+  //     variables: {
+  //       footerMenuHandle: 'footer', // Adjust to your footer menu handle
+  //     },
+  //   })
+  //   .catch((error: Error) => {
+  //     // Log query errors, but don't throw them so the page can still render
+  //     console.error(error);
+  //     return null;
+  //   });
   return {
-    cart: cart.get(),
+    cart: cartData,
     isLoggedIn: customerAccount.isLoggedIn(),
-    footer,
+    // footer,
   };
 }
 
@@ -178,9 +179,7 @@ export default function App() {
       shop={data.shop}
       consent={data.consent}
     >
-      <PageLayout {...data}>
-        <Outlet />
-      </PageLayout>
+      <Outlet />
     </Analytics.Provider>
   );
 }
