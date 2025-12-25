@@ -4,6 +4,23 @@ export const CUSTOMER_FRAGMENT = `#graphql
     id
     firstName
     lastName
+     emailAddress {
+      emailAddress
+    }
+    orders(first: 10, sortKey: PROCESSED_AT, reverse: true) {
+      nodes {
+        id
+        name
+        processedAt
+        financialStatus
+        fulfillmentStatus
+
+        totalPrice {
+          amount
+          currencyCode
+        }
+      }
+    }
     defaultAddress {
       ...Address
     }

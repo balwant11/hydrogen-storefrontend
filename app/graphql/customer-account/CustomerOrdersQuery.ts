@@ -13,6 +13,7 @@ export const ORDER_ITEM_FRAGMENT = `#graphql
       }
     }
     id
+    name
     number
     confirmationNumber
     processedAt

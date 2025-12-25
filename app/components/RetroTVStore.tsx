@@ -12,24 +12,18 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import {CartForm} from '@shopify/hydrogen';
-import {Await, useRouteLoaderData} from 'react-router';
+import {Await, useFetcher, useNavigation, useRouteLoaderData} from 'react-router';
 import type {RootLoader} from '~/root';
 import type {CollectionsWithProductsQuery} from 'storefrontapi.generated';
+import type {CustomerOrdersQuery} from 'customer-accountapi.generated';
+import {OrderHistory} from './OrderHistory';
+import Addresses from './Address';
 
 // 👉 ADD THIS BELOW ALL IMPORTS
 
-// type VariantNode = {
-//   id: string;
-//   availableForSale: boolean;
-//   quantityAvailable?: number;
-//   price: {
-//     amount: string;
-//   };
-//   selectedOptions: {
-//     name: string;
-//     value: string;
-//   }[];
-// };
+type Order = NonNullable<
+  NonNullable<CustomerOrdersQuery['customer']>['orders']
+>['nodes'][number];
 
 type ShopifyVariant =
   CollectionsWithProductsQuery['collections']['nodes'][number]['products']['nodes'][number]['variants']['nodes'][number];
@@ -115,17 +109,24 @@ export default function RetroTVStore({collections}: RetroTVStoreProps) {
   const [showPrompt, setShowPrompt] = useState(true); // State for the first-time user prompt
   const [categoryIdx, setCategoryIdx] = useState(0);
   const [productIdx, setProductIdx] = useState(0);
-  // const [variantIdx, setVariantIdx] = useState(0);
-  // const [sizeIdx, setSizeIdx] = useState(0); // New size state
   const [selectedColor, setSelectedColor] = useState<string | undefined>();
   const [selectedSize, setSelectedSize] = useState<string | undefined>();
   const [staticEffect, setStaticEffect] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
-  // const [cart, setCart] = useState<Product[]>([]);
+  const [showAccount, setShowAccount] = useState(false);
   const [showCart, setShowCart] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
   const rootData = useRouteLoaderData<RootLoader>('root');
   const cart = rootData?.cart;
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem('tvOn');
+    if (saved === '1') setIsOn(true);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem('tvOn', isOn ? '1' : '0');
+  }, [isOn]);
 
   const categories: Category[] = (collections ?? []).map((collection) => ({
     id: collection.id,
@@ -175,7 +176,7 @@ export default function RetroTVStore({collections}: RetroTVStoreProps) {
       ? variant.selectedOptions.some(
           (o) => o.name === 'Size' && o.value === selectedSize,
         )
-      : true; 
+      : true;
 
     return colorMatch && sizeMatch;
   });
@@ -190,14 +191,6 @@ export default function RetroTVStore({collections}: RetroTVStoreProps) {
     setStaticEffect(true);
     setTimeout(() => setStaticEffect(false), 600);
   };
-  // console.log('🧪 VARIANT DEBUG', {
-  //   product: currentProduct.name,
-  //   color: selectedColor,
-  //   size: selectedSize,
-  //   variantId: selectedVariant?.id,
-  //   availableForSale: selectedVariant?.availableForSale,
-  //   quantityAvailable: selectedVariant?.quantityAvailable,
-  // });
 
   const handlePower = () => {
     if (showPrompt) setShowPrompt(false); // Dismiss prompt on power interaction
@@ -553,6 +546,8 @@ export default function RetroTVStore({collections}: RetroTVStoreProps) {
                       ))}
                     </div>
                   </div>
+                ) : showAccount ? (
+                  <AccountScreen />
                 ) : (
                   /* Main Product View */
                   <div className="w-full h-full relative group">
@@ -704,9 +699,9 @@ export default function RetroTVStore({collections}: RetroTVStoreProps) {
                         {(fetcher) => {
                           const isAdding = fetcher.state !== 'idle';
 
-                          let buttonText = 'SELECT COLOR';
+                          let buttonText = 'SELECT VARIENT';
                           if (selectedColor && !selectedSize)
-                            buttonText = 'SELECT SIZE';
+                            buttonText = 'SELECT VARIENT';
                           if (selectedVariantId && isOutOfStock)
                             buttonText = 'OUT OF STOCK';
                           if (canOrder)
@@ -866,6 +861,33 @@ export default function RetroTVStore({collections}: RetroTVStoreProps) {
               </div>
               <span className="text-[9px] font-bold text-gray-600">CART</span>
             </button>
+
+            <button
+              onClick={() => {
+                if (!rootData?.isLoggedIn) {
+                  window.location.href = '/account/login';
+                } else {
+                  setShowGuide(false);
+                  setShowCart(false);
+                  setShowAccount(true);
+                  triggerStatic();
+                  // 👉 next step: showAccount state
+                }
+              }}
+              disabled={!isOn}
+              className="group flex flex-col items-center gap-1 active:scale-95 transition-transform disabled:opacity-50"
+            >
+              <div
+                className="w-full aspect-square bg-gray-800 rounded shadow-[0_4px_0_rgb(30,30,30)]
+    group-active:shadow-none group-active:translate-y-1 flex items-center justify-center border-t border-gray-600"
+              >
+                <CreditCard className="w-6 h-6 text-green-400" />
+              </div>
+
+              <span className="text-[9px] font-bold text-gray-600">
+                {rootData?.isLoggedIn ? 'ACCOUNT' : 'SIGN IN'}
+              </span>
+            </button>
           </div>
 
           {/* Power Section */}
@@ -990,3 +1012,77 @@ export default function RetroTVStore({collections}: RetroTVStoreProps) {
     </div>
   );
 }
+
+function AccountScreen() {
+  const customerFetcher = useFetcher();
+  const navigation = useNavigation();
+
+  const isSigningOut =
+    navigation.state === 'submitting' &&
+    navigation.formAction === '/account/logout';
+
+  useEffect(() => {
+    if (customerFetcher.state === 'idle' && !customerFetcher.data) {
+      customerFetcher.load('/account');
+    }
+  }, [customerFetcher]);
+
+  const customer = customerFetcher.data?.customer;
+
+  if (!customer) {
+    return (
+      <div className="w-full h-full bg-blue-900/95 text-green-400 p-8 font-mono">
+        LOADING ACCOUNT...
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full h-full bg-blue-900/95 text-green-400 p-8 font-mono overflow-y-auto">
+      {/* HEADER */}
+      <div className="flex justify-between border-b-2 border-green-500 mb-4 pb-2 sticky top-0 bg-blue-900 z-10">
+        <h2 className="text-2xl font-bold blink">ACCOUNT</h2>
+        <span>{new Date().toLocaleTimeString()}</span>
+      </div>
+
+      {/* PROFILE */}
+      <div className="border border-green-800 p-3 mb-6">
+        <div className="bg-green-900 text-black px-2 mb-2 font-bold uppercase">
+          PROFILE
+        </div>
+        <div className="border border-green-800 p-3 rounded text-[14px]">
+          <p className="text-sm !text-sm">
+            NAME:{' '}
+            <span className="text-sm !text-sm">
+              {customer.firstName} {customer.lastName}
+            </span>
+          </p>
+
+          <p className="text-sm !text-sm">
+            EMAIL:{' '}
+            <span className="text-sm !text-sm">
+              {customer.emailAddress?.emailAddress}
+            </span>
+          </p>
+        </div>
+      </div>
+      <OrderHistory />
+      <Addresses customer={customer} />
+      <form method="post" action="/account/logout">
+        <button
+          type="submit"
+          className={`px-4 py-1.5 mt-6 rounded-sm font-bold uppercase tracking-widest
+      border-b-4 active:border-b-0 active:translate-y-1
+      transition-all shadow-[0_4px_10px_rgba(0,0,0,0.5)]
+      text-xs md:text-sm
+      bg-red-600 hover:bg-red-500 border-red-800 text-white
+    `}
+        >
+         {isSigningOut ? 'SIGNING OUT…' : 'SIGN OUT'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+

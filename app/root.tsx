@@ -121,27 +121,17 @@ async function loadCriticalData({context}: Route.LoaderArgs) {
  * Make sure to not throw any errors here, as it will cause the page to 500.
  */
 async function loadDeferredData({context}: Route.LoaderArgs) {
-  const {storefront, customerAccount, cart} = context;
+  const {cart, customerAccount} = context;
+
   const cartData = await cart.get();
-  // defer the footer query (below the fold)
-  // const footer = storefront
-  //   .query(FOOTER_QUERY, {
-  //     cache: storefront.CacheLong(),
-  //     variables: {
-  //       footerMenuHandle: 'footer', // Adjust to your footer menu handle
-  //     },
-  //   })
-  //   .catch((error: Error) => {
-  //     // Log query errors, but don't throw them so the page can still render
-  //     console.error(error);
-  //     return null;
-  //   });
+  const isLoggedIn = await customerAccount.isLoggedIn();
+
   return {
     cart: cartData,
-    isLoggedIn: customerAccount.isLoggedIn(),
-    // footer,
+    isLoggedIn,
   };
 }
+
 
 export function Layout({children}: {children?: React.ReactNode}) {
   const nonce = useNonce();
